@@ -1,9 +1,10 @@
 from __future__ import print_function
 import os.path
+import sys
 import time
 import re
 import telegram_send
-from playsound import playsound
+#from playsound import playsound
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -24,33 +25,31 @@ def checkAttendance(sent):
             return True
     return False
 
+# This function uses the Drive API to fetch the folders in your Google Drive. Once it gets the
+# id of the folder called "Meet Transcript", it then returns the id of the very first file (the
+# latest doc which contains the dialogues of the current Google Meeting) in that folder.
+
 
 def getDocumentID(creds):
     driveService = build('drive', 'v3', credentials=creds)
 
     results = driveService.files().list(
-        q="mimeType = 'application/vnd.google-apps.folder'", fields="nextPageToken, files(id, name)").execute()
+        q="mimeType = 'application/vnd.google-apps.folder' and name = 'Meet Transcript'", fields="nextPageToken, files(id, name)").execute()
     items = results.get('files', [])
 
     if not items:
-        print('No files found.')
+        sys.exit("The folder called 'Meet Transcript' does not exist. Please run the program after the 'Meet Transcript' Chrome Extension is running during the Google Meeting")
     else:
-        for item in items:
-            if item['name'] == "Meet Transcript":
-                folderID = item['id']
-            #print(u'{0} ({1})'.format(item['name'], item['id']))
+        folderID = items[0]['id']
 
     results = driveService.files().list(
         q="parents in '{}'".format(folderID), pageSize=1, fields="nextPageToken, files(id, name)").execute()
     items = results.get('files', [])
 
     if not items:
-        print('No files found.')
+        sys.exit("No doc files found. Please run the program after the 'Meet Transcript' Chrome Extension is running during the Google Meeting")
     else:
-        # for item in items:
-        #     print(u'{0} ({1})'.format(item['name'], item['id']))
-        DOCUMENT_ID = items[0]['id']
-        return DOCUMENT_ID
+        return items[0]['id']
 
 
 def main():
@@ -74,16 +73,21 @@ def main():
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
 
-    # Retrieve the documents contents from the Docs service.
+    # Getting the document ID of the latest Google Meet conversation
+    DOCUMENT_ID = getDocumentID(creds)
+    print("Script is up and running ! DO NOT CLOSE THIS APPLICATION")
+
+    # Retrieve the documents contents using the Docs API. Here document is a dictionary
+    # that has a lot of nested dictionaries and lists within it.
     docService = build('docs', 'v1', credentials=creds)
     currentIndex = 1
     notFound = True
     while notFound:
-        document = docService.documents().get(documentId=getDocumentID(creds)).execute()
+        document = docService.documents().get(documentId=DOCUMENT_ID).execute()
 
         # Going through every paragraph in the document
         for i in range(currentIndex, len(document['body']['content'])):
-            print("i =  :", i)
+            #print("i =  :", i)
             try:
                 if checkAttendance(document['body']['content'][i]['paragraph']
                                    ['elements'][1]['textRun']['content']):
@@ -92,7 +96,7 @@ def main():
                 else:
                     # This is so that the next time the document is retrieved, it doesn't have to
                     # go through all the paragraphs again. It just begins searching for the word
-                    # at the latest paragraph.
+                    # at the paragraph it left off.
                     currentIndex = i
 
                     # In case, there are chat messages during the Gmeet, the document gets
@@ -110,8 +114,8 @@ def main():
 
         time.sleep(2)  # Checking every 2 seconds
 
-    print("Alert!")
-    telegram_send.send(messages=["attendance"])
+    print("Alert! : Attendance Call")
+    telegram_send.send(messages=["ATTENDANCE"])
     # playsound('run.mp3')
 
 
