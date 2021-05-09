@@ -13,11 +13,6 @@ from google.oauth2.credentials import Credentials
 SCOPES = ['https://www.googleapis.com/auth/documents.readonly',
           'https://www.googleapis.com/auth/drive.metadata.readonly']
 
-# The ID of a sample document.
-DOCUMENT_ID = ''
-folderID = ''
-latestItem = ''
-
 
 def checkAttendance(sent):
     res = re.findall(r'\w+', sent)
@@ -27,11 +22,36 @@ def checkAttendance(sent):
     return False
 
 
+def getDocumentID(creds):
+    driveService = build('drive', 'v3', credentials=creds)
+
+    results = driveService.files().list(
+        q="mimeType = 'application/vnd.google-apps.folder'", fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    if not items:
+        print('No files found.')
+    else:
+        for item in items:
+            if item['name'] == "Meet Transcript":
+                folderID = item['id']
+            #print(u'{0} ({1})'.format(item['name'], item['id']))
+
+    results = driveService.files().list(
+        q="parents in '{}'".format(folderID), pageSize=1, fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    if not items:
+        print('No files found.')
+    else:
+        # for item in items:
+        #     print(u'{0} ({1})'.format(item['name'], item['id']))
+        DOCUMENT_ID = items[0]['id']
+        return DOCUMENT_ID
+
+
 def main():
-    print("Enter the document ID : ")
-    #DOCUMENT_ID = input()
     """Shows basic usage of the Docs API.
-    Prints the title of a sample document.
     """
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
@@ -51,62 +71,34 @@ def main():
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
 
-    service = build('drive', 'v3', credentials=creds)
-
-    results = service.files().list(
-        q="mimeType = 'application/vnd.google-apps.folder'", pageSize=10, fields="nextPageToken, files(id, name)").execute()
-    items = results.get('files', [])
-
-    if not items:
-        print('No files found.')
-    else:
-        print('Files:')
-        for item in items:
-            if item['name'] == "Meet Transcript":
-                folderID = item['id']
-            print(u'{0} ({1})'.format(item['name'], item['id']))
-    print(folderID)
-
-    results = service.files().list(
-        q="parents in '{}'".format(folderID), pageSize=1, fields="nextPageToken, files(id, name)").execute()
-    items = results.get('files', [])
-
-    if not items:
-        print('No files found.')
-    else:
-        print('Files:')
-        for item in items:
-            print(u'{0} ({1})'.format(item['name'], item['id']))
-        latestItem = items[0]['id']
-        print(latestItem)
-
     # Retrieve the documents contents from the Docs service.
-    # currentIndex = 1
-    # notFound = True
-    # while notFound:
-    #     document = service.documents().get(documentId=DOCUMENT_ID).execute()
+    docService = build('docs', 'v1', credentials=creds)
+    currentIndex = 1
+    notFound = True
+    while notFound:
+        document = docService.documents().get(documentId=getDocumentID(creds)).execute()
 
-    #     for i in range(currentIndex, len(document['body']['content'])):
-    #         print("i =  :", i)
-    #         try:
-    #             if checkAttendance(document['body']['content'][i]['paragraph']
-    #                                ['elements'][1]['textRun']['content']):
-    #                 notFound = False
-    #                 break
-    #             else:
-    #                 currentIndex = i
-    #                 if document['body']['content'][i+3]['paragraph']['elements'][0]['textRun']['content'] == "____________________________________________________________________________\n":
-    #                     break
+        for i in range(currentIndex, len(document['body']['content'])):
+            print("i =  :", i)
+            try:
+                if checkAttendance(document['body']['content'][i]['paragraph']
+                                   ['elements'][1]['textRun']['content']):
+                    notFound = False
+                    break
+                else:
+                    currentIndex = i
+                    if document['body']['content'][i+3]['paragraph']['elements'][0]['textRun']['content'] == "____________________________________________________________________________\n":
+                        break
 
-    #         except IndexError:
-    #             continue
-    #         except KeyError:
-    #             continue
+            except IndexError:
+                continue
+            except KeyError:
+                continue
 
-    #     time.sleep(2)
+        time.sleep(2)
 
-    # print("Alert!")
-    # telegram_send.send(messages=["attendance"])
+    print("Alert!")
+    telegram_send.send(messages=["attendance"])
     # playsound('run.mp3')
 
 
