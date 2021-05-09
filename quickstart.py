@@ -10,10 +10,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/documents.readonly']
-
-# The ID of a sample document.
-DOCUMENT_ID = ''
+SCOPES = ['https://www.googleapis.com/auth/documents.readonly',
+          'https://www.googleapis.com/auth/drive.metadata.readonly']
 
 
 # This function takes the text in a paragraph of the document and splits it up in a way such that
@@ -27,11 +25,36 @@ def checkAttendance(sent):
     return False
 
 
-def main():
-    print("Enter the document ID : ")
-    DOCUMENT_ID = input()
+def getDocumentID(creds):
+    driveService = build('drive', 'v3', credentials=creds)
 
-    """Shows basic usage of the Docs API. This code is a snippet from the Docs API website:
+    results = driveService.files().list(
+        q="mimeType = 'application/vnd.google-apps.folder'", fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    if not items:
+        print('No files found.')
+    else:
+        for item in items:
+            if item['name'] == "Meet Transcript":
+                folderID = item['id']
+            #print(u'{0} ({1})'.format(item['name'], item['id']))
+
+    results = driveService.files().list(
+        q="parents in '{}'".format(folderID), pageSize=1, fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    if not items:
+        print('No files found.')
+    else:
+        # for item in items:
+        #     print(u'{0} ({1})'.format(item['name'], item['id']))
+        DOCUMENT_ID = items[0]['id']
+        return DOCUMENT_ID
+
+
+def main():
+    """Shows basic usage of the Docs API.
     """
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
@@ -51,14 +74,12 @@ def main():
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
 
-    service = build('docs', 'v1', credentials=creds)
-
+    # Retrieve the documents contents from the Docs service.
+    docService = build('docs', 'v1', credentials=creds)
     currentIndex = 1
     notFound = True
     while notFound:
-        # Retrieve the documents contents from the Docs service. Here document is a dictionary
-        # that has a lot of nested dictionaries and lists
-        document = service.documents().get(documentId=DOCUMENT_ID).execute()
+        document = docService.documents().get(documentId=getDocumentID(creds)).execute()
 
         # Going through every paragraph in the document
         for i in range(currentIndex, len(document['body']['content'])):
