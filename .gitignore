@@ -1,0 +1,5 @@
+#Ignore the credentials file
+credentials.json
+
+#Ignore the token file
+token.json
