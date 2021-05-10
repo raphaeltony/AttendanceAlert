@@ -4,7 +4,6 @@ import sys
 import time
 import re
 import telegram_send
-#from playsound import playsound
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -116,7 +115,6 @@ def main():
 
     print("Alert! : Attendance Call")
     telegram_send.send(messages=["ATTENDANCE"])
-    # playsound('run.mp3')
 
 
 if __name__ == '__main__':
